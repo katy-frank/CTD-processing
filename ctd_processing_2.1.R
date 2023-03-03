@@ -5,16 +5,9 @@ library(openxlsx)
 library(ggplot2)
 library(DescTools)
 
-# take user input for working directory
-wd <- choose.dir(default = "", caption = "Select input file folder")
-
-out_dir <- choose.dir(default = "", caption = "Select output file folder")
-setwd(out_dir)
-dir.create("OUTPUT")
-setwd(wd)
-
-files <- list.files(pattern=".asc")
-
+############################################
+# Helper functions
+############################################
 getColumnName <- function(text,colNum){
   exp <- paste0("name ",colNum,"...")
   name_partial <- str_split(text,regex(exp,dotall = TRUE))[[1]][2]
@@ -42,31 +35,57 @@ useSaginawBaySpecifics <- function(lake_name, sitename, site_shortname){
       | tolower(sitename) %like% "sagbay"
       | tolower(site_shortname) %like% "sagbay"
       | tolower(lake_name) %like% "huron")
-      | tolower(lake_name) %like% "sagbay"){
+     | tolower(lake_name) %like% "sagbay"){
     is_sagbay <- TRUE
   }
   
   is_sagbay
 }
+############################################
 
+
+############################################
+# Initial configuration from user input
+############################################
+# take user input for working directory
+wd <- choose.dir(default = "", caption = "Select input file folder")
+
+# take user input for output directory
+out_dir <- choose.dir(default = "", caption = "Select output file folder")
+setwd(out_dir)
+dir.create("OUTPUT")
+
+setwd(wd)
+
+# set the name of the lake, vessel, and sampling program
 lake_name <- readline("Enter the name of the lake (e.g. Erie): ")
 vessel_name <- readline("Enter the name of the vessel (e.g. R4108): ")
 program_name <- readline("Enter the name of the program (e.g. HABS): ")
+############################################
+
+
+# read in the files in the input directory
+files <- list.files(pattern=".asc")
 
 # create summary excel sheet
 wb <- createWorkbook()
 
-# process each CTD output file
+# process each CTD file
 for(file in files){
+  # make sure we are back in the input directory
   setwd(wd)
   
+  # print out the filename we are processing
   print(paste0("Processing file ", file,"... "))
   
+  # read the data from the file
   data <- read.table(file,header=FALSE)
   
+  # print a preview of the file
   print("File preview... ")
   print(head(data))
   
+  # parse the file name and create the name of the header file
   filename <- str_split(file, "[.]")[[1]][1]
   header <- readtext(paste0(filename,".hdr"))
   
@@ -74,14 +93,17 @@ for(file in files){
   start_time_partial <- str_split(header$text,regex("start_time...",dotall = TRUE))[[1]][2]
   start_time <- str_split(start_time_partial, regex("..Instrument's time stamp, header.",dotall=TRUE))[[1]][1]
   
+  # get the names of the columns from the header file
   col_names <- c()
   name_count <- str_split(header$text,regex(" name [0-9]"))
   for (i in 1:(length(name_count[[1]]) - 1)){
     col_names <- append(col_names, getColumnNameDataFrame(header$text,i-1))
   }
   
+  # assign the column names to the data
   colnames(data) <- col_names
   
+  # parse the filename to extract the name of the sensor
   split_filename <- str_split(filename,"_")
   sensorname <- split_filename[[1]][1]
   file_sensorname <- sensorname
@@ -90,24 +112,31 @@ for(file in files){
     file_sensorname = "CTD"
   }
   
-  # get components of date from start_time to convert to UTC and output
+  # get components of date from start_time to convert to UTC, and output it
   date_formatted <- as.POSIXct(start_time,format="%b %d %Y %H:%M:%OS")
   date <- str_remove_all(str_split(date_formatted," ")[[1]][1],"-")
   # attr(date_formatted, "tzone") <- "UTC" # commenting out for now- we think header file is in UTC already
+  
   display_time <- str_split(date_formatted," ")[[1]][2]
   display_date <- str_split(start_time,regex(" "))[[1]]
   
+  # prompt the user to enter the sampling site associated with this file, or skip it 
   site_prompt_date <- paste0(display_date[2]," ",display_date[1]," ",display_date[3], " ", display_time, " (UTC)")
-  sitename <- readline(paste0("Enter the site with the file (e.g. WE2): ",file," from ",site_prompt_date,", or type skip to go to the next site: "))
+  sitename <- readline(paste0("Enter the site with the file (e.g. WE2): ",file," from ",site_prompt_date,", or type skip to skip and process the next site: "))
   
+  # if the user typed skip, do not process this file
   if (sitename == "skip") {
     print(paste0("Skipping file ",file," ..."))
     next
   }
+  
+  # parse the site name entered to extract only the letters (e.g. if 'we2', yields 'we')
   site_shortname <- str_split(sitename, regex("[0-9]"))[[1]][1]
   
-  is_sagbay <- useSaginawBaySpecifics(lake_name,sitename, site_shortname)
+  # determine if this sampling site is in saginaw bay
+  is_sagbay <- useSaginawBaySpecifics(lake_name, sitename, site_shortname)
   
+  # prompt the user to see if this was a surface or depth sample
   sample_depth_measured <- readline("If surface sample only, enter 1. If surface and depth sample, enter 2: ")
   
   # create first several rows of output csv
@@ -118,20 +147,22 @@ for(file in files){
     tz = c("UTC","","","","","","")
   )
   
-  # write to csv
+  # write to csv file
   setwd(paste0(out_dir,"/OUTPUT"))
   output_filename = paste0(date,"_",program_name,"_",file_sensorname,"_",sitename,".csv")
   
+  # for each column name, bind them together into one data structure
   output_col_names <- NULL
   for (i in 1:(length(name_count[[1]]) - 2)){
     output_col_names <- cbind(output_col_names, getColumnName(header$text,i-1))
   }
   
+  # actually write the data to the individual output csv files
   write.table(output_indv_csvs, output_filename, col.names=FALSE, sep=",")
   write.table(output_col_names, output_filename, col.names=FALSE, sep=",", append=TRUE)
   write.table(data[,1:(length(name_count[[1]]) - 2)], output_filename, col.names=FALSE, sep=",", append=TRUE)
   
-  # then process the asc file and add to the summary file as a new sheet
+  # then process the .asc file and add to the summary file as a new sheet
   setwd(paste0(out_dir))
   
   max_depth <- max(data$depFM)
@@ -142,12 +173,12 @@ for(file in files){
     sample_depth <- 3
   }
   
+  # calculate the min and max sample depths
   sample_min <- sample_depth - 0.25
   sample_max <- sample_depth + 0.25
   
-  # find which rows have values less than 0 and begin processing after those rows
+  # find which rows have depth values less than 0 and begin processing after those rows
   start_index <- max(which(data$depFM < 0)) + 1
-  
   subset_data <- data[start_index:nrow(data),]
   
   # find 0.5-1m depth range
@@ -223,6 +254,7 @@ for(file in files){
     row6 <- cbind(row6, "Depth")
     row7 <- cbind(row7,"(m)")
   }
+  
   if(length(grep("tv290C",colnames(writable_data),value=FALSE)) > 0){
     row6 <- cbind(row6, "Temperature")
     row7 <- cbind(row7,"(\u00B0C)")
