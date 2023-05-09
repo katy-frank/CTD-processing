@@ -98,7 +98,6 @@ for(file in files){
     next
   }
   
-  
   # print a preview of the file
   print("File preview... ")
   print(head(data))
