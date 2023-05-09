@@ -4,6 +4,7 @@ library(readtext)
 library(openxlsx)
 library(ggplot2)
 library(DescTools)
+library(r2r)
 
 ############################################
 # Helper functions
@@ -47,22 +48,30 @@ useSaginawBaySpecifics <- function(lake_name, sitename, site_shortname){
 ############################################
 # Initial configuration from user input
 ############################################
+global_params <- read.csv("global_parameters.csv")
+station_details <- read.csv("station_details.csv")
+
 # take user input for working directory
-wd <- choose.dir(default = "", caption = "Select input file folder")
+wd <- global_params["input_folder"][[1]]
 
 # take user input for output directory
-out_dir <- choose.dir(default = "", caption = "Select output file folder")
+out_dir <- global_params["output_folder"][[1]]
 setwd(out_dir)
 dir.create("OUTPUT")
 
 setwd(wd)
 
 # set the name of the lake, vessel, and sampling program
-lake_name <- readline("Enter the name of the lake (e.g. Erie): ")
-vessel_name <- readline("Enter the name of the vessel (e.g. R4108): ")
-program_name <- readline("Enter the name of the program (e.g. HABS): ")
+lake_name <- global_params["lake"][[1]]
+vessel_name <- global_params["vessel"][[1]]
+program_name <- global_params["program"][[1]]
 ############################################
 
+# initialize the mapping between the station details and the files
+stations <- hashmap()
+for(i in 1:length(station_details[[1]])){
+  stations[[ as.numeric(station_details$file_ends_with[i]) ]] <- i
+}
 
 # read in the files in the input directory
 files <- list.files(pattern=".asc")
@@ -80,6 +89,10 @@ for(file in files){
   
   # read the data from the file
   data <- read.table(file,header=FALSE)
+  
+  station_order <- str_split(str_split(file, "[.]")[[1]][1], "_")[[1]]
+  station_order <- as.numeric(station_order[length(station_order)])
+  station_index <- stations[[station_order]]
   
   # print a preview of the file
   print("File preview... ")
@@ -120,9 +133,8 @@ for(file in files){
   display_time <- str_split(date_formatted," ")[[1]][2]
   display_date <- str_split(start_time,regex(" "))[[1]]
   
-  # prompt the user to enter the sampling site associated with this file, or skip it 
-  site_prompt_date <- paste0(display_date[2]," ",display_date[1]," ",display_date[3], " ", display_time, " (UTC)")
-  sitename <- readline(paste0("Enter the site with the file (e.g. WE2): ",file," from ",site_prompt_date,", or type skip to skip and process the next site: "))
+  # site associated with the file (e.g. WE2): or skip to skip and process the next site
+  sitename <- station_details$station[station_index]
   
   # if the user typed skip, do not process this file
   if (sitename == "skip") {
@@ -136,8 +148,8 @@ for(file in files){
   # determine if this sampling site is in saginaw bay
   is_sagbay <- useSaginawBaySpecifics(lake_name, sitename, site_shortname)
   
-  # prompt the user to see if this was a surface or depth sample
-  sample_depth_measured <- readline("If surface sample only, enter 1. If surface and depth sample, enter 2: ")
+  # If surface sample only, then 1. If surface and depth sample, then 2
+  sample_depth_measured <- station_details$surface_depth[station_index]
   
   # create first several rows of output csv
   output_indv_csvs <- data.frame(
