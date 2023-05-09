@@ -93,6 +93,11 @@ for(file in files){
   station_order <- str_split(str_split(file, "[.]")[[1]][1], "_")[[1]]
   station_order <- as.numeric(station_order[length(station_order)])
   station_index <- stations[[station_order]]
+  if(is.null(station_index)){
+    print(paste0("No station associated with file ",file,". If you believe this is an error, check configuration in station_details.csv. Skipping..."))
+    next
+  }
+  
   
   # print a preview of the file
   print("File preview... ")
