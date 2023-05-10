@@ -132,7 +132,6 @@ for(file in files){
   # get components of date from start_time to convert to UTC, and output it
   date_formatted <- as.POSIXct(start_time,format="%b %d %Y %H:%M:%OS")
   date <- str_remove_all(str_split(date_formatted," ")[[1]][1],"-")
-  # attr(date_formatted, "tzone") <- "UTC" # commenting out for now- we think header file is in UTC already
   
   display_time <- str_split(date_formatted," ")[[1]][2]
   display_date <- str_split(start_time,regex(" "))[[1]]
@@ -146,8 +145,8 @@ for(file in files){
     next
   }
   
-  # parse the site name entered to extract only the letters (e.g. if 'we2', yields 'we')
-  site_shortname <- str_split(sitename, regex("[0-9]"))[[1]][1]
+  # read the site shortname from details file (e.g. will be 'we' for 'we8')
+  site_shortname <- station_details$shortname[station_index]
   
   # determine if this sampling site is in saginaw bay
   is_sagbay <- useSaginawBaySpecifics(lake_name, sitename, site_shortname)
