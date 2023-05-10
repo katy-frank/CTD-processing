@@ -42,6 +42,11 @@ useSaginawBaySpecifics <- function(lake_name, sitename, site_shortname){
   
   is_sagbay
 }
+
+# remove non-alphanumeric characters from a string
+stripNonAlphanumericChars <- function(str){
+  str_replace_all(str,"[^[:alnum:]]", "")
+}
 ############################################
 
 
@@ -62,9 +67,9 @@ dir.create("OUTPUT")
 setwd(wd)
 
 # set the name of the lake, vessel, and sampling program
-lake_name <- global_params["lake"][[1]]
-vessel_name <- global_params["vessel"][[1]]
-program_name <- global_params["program"][[1]]
+lake_name <- stripNonAlphanumericChars(global_params["lake"][[1]])
+vessel_name <- stripNonAlphanumericChars(global_params["vessel"][[1]])
+program_name <- stripNonAlphanumericChars(global_params["program"][[1]])
 ############################################
 
 # initialize the mapping between the station details and the files
@@ -90,9 +95,11 @@ for(file in files){
   # read the data from the file
   data <- read.table(file,header=FALSE)
   
+  # grab the station associated with this file, or if none, skip
   station_order <- str_split(str_split(file, "[.]")[[1]][1], "_")[[1]]
   station_order <- as.numeric(station_order[length(station_order)])
   station_index <- stations[[station_order]]
+  
   if(is.null(station_index)){
     print(paste0("No station associated with file ",file,". If you believe this is an error, check configuration in station_details.csv. Skipping..."))
     next
@@ -137,7 +144,7 @@ for(file in files){
   display_date <- str_split(start_time,regex(" "))[[1]]
   
   # site associated with the file (e.g. WE2): or skip to skip and process the next site
-  sitename <- station_details$station[station_index]
+  sitename <- stripNonAlphanumericChars(station_details$station[station_index])
   
   # if the user typed skip, do not process this file
   if (sitename == "skip") {
@@ -145,8 +152,8 @@ for(file in files){
     next
   }
   
-  # read the site shortname from details file (e.g. will be 'we' for 'we8')
-  site_shortname <- station_details$shortname[station_index]
+  # read the site shortname from details config file (e.g.'WE' for 'WE8')
+  site_shortname <- stripNonAlphanumericChars(station_details$shortname[station_index])
   
   # determine if this sampling site is in saginaw bay
   is_sagbay <- useSaginawBaySpecifics(lake_name, sitename, site_shortname)
@@ -156,15 +163,15 @@ for(file in files){
   
   # create first several rows of output csv
   output_indv_csvs <- data.frame(
-    variable = c("Date","Lake","Site Name","Program","Vessel","Sensor",""),
-    value = c(paste0(display_date[2],"-",display_date[1],"-",display_date[3]),lake_name,sitename, program_name, vessel_name, sensorname,""),
-    time = c(display_time,"","","","","",""),
-    tz = c("UTC","","","","","","")
+    variable = c("Date", "Lake", "Site Name", "Program", "Vessel", "Sensor",""),
+    value = c(paste0(display_date[2], "-", display_date[1], "-", display_date[3]), lake_name, sitename, program_name, vessel_name, sensorname, ""),
+    time = c(display_time, "", "", "", "", "", ""),
+    tz = c("UTC", "", "", "", "", "", "")
   )
   
   # write to csv file
   setwd(paste0(out_dir,"/OUTPUT"))
-  output_filename = paste0(date,"_",program_name,"_",file_sensorname,"_",sitename,".csv")
+  output_filename = paste0(date, "_", program_name, "_", file_sensorname, "_", output_sitename, ".csv")
   
   # for each column name, bind them together into one data structure
   output_col_names <- NULL
@@ -222,6 +229,7 @@ for(file in files){
       mean_value <- mean(subset_data[min(depth_range):max(depth_range),i])
       row3<-cbind(row3, mean_value)
     }
+    
     row3 <- cbind(row3, "")
     row3 <- cbind(row3, "sample depth")
     row3 <- cbind(row3, "n-0.25")
@@ -238,6 +246,7 @@ for(file in files){
       mean_value <- mean(subset_data[min(sample_depth_range):max(sample_depth_range),i])
       row4<-cbind(row4, mean_value)
     }
+    
     row4 <- cbind(row4, "")
     row4 <- cbind(row4, sample_depth)
     row4 <- cbind(row4, sample_min)
