@@ -70,6 +70,9 @@ setwd(wd)
 lake_name <- stripNonAlphanumericChars(global_params["lake"][[1]])
 vessel_name <- stripNonAlphanumericChars(global_params["vessel"][[1]])
 program_name <- stripNonAlphanumericChars(global_params["program"][[1]])
+
+# read the site shortname from details config file - only used in naming output summary file
+site_shortname <- stripNonAlphanumericChars(global_params["shortname"][[1]])
 ############################################
 
 # initialize the mapping between the station details and the files
@@ -151,9 +154,6 @@ for(file in files){
     print(paste0("Skipping file ",file," ..."))
     next
   }
-  
-  # read the site shortname from details config file (e.g.'WE' for 'WE8')
-  site_shortname <- stripNonAlphanumericChars(station_details$shortname[station_index])
   
   # determine if this sampling site is in saginaw bay
   is_sagbay <- useSaginawBaySpecifics(lake_name, sitename, site_shortname)
