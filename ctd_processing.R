@@ -164,7 +164,7 @@ for(file in files){
   # create first several rows of output csv
   output_indv_csvs <- data.frame(
     variable = c("Date", "Lake", "Site Name", "Program", "Vessel", "Sensor",""),
-    value = c(paste0(display_date[2], "-", display_date[1], "-", display_date[3]), lake_name, sitename, program_name, vessel_name, sensorname, ""),
+    value = c(paste0(display_date[2], "-", display_date[1], "-", display_date[3]), lake_name, station_details$station[station_index], program_name, vessel_name, sensorname, ""),
     time = c(display_time, "", "", "", "", "", ""),
     tz = c("UTC", "", "", "", "", "", "")
   )
@@ -210,10 +210,10 @@ for(file in files){
   # create first several rows of output csv
   addWorksheet(wb, sitename)
   
-  row1 <- data.frame(sitename,
+  row1 <- data.frame(station_details$station[station_index],
                     "",
                     display_time,
-                    paste0(display_date[1]," ",display_date[2],", ",display_date[3],": ", sitename),
+                    paste0(display_date[1]," ",display_date[2],", ",display_date[3],": ", station_details$station[station_index]),
                     0.435, # Constant!
                     "","","","","","","",
                     "max depth",
