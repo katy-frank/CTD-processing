@@ -9,7 +9,7 @@ library(r2r)
 ############################################
 # Helper functions
 ############################################
-getColumnName <- function(text,colNum){
+getFullColumnName <- function(text,colNum){
   exp <- paste0("name ",colNum,"...")
   name_partial <- str_split(text,regex(exp,dotall = TRUE))[[1]][2]
   name_partial <- str_split(name_partial, regex(": ",dotall=TRUE))[[1]][2]
@@ -18,10 +18,13 @@ getColumnName <- function(text,colNum){
 }
 
 getColumnNameDataFrame <- function(text,colNum){
-  exp <- paste0("name ",colNum,"...")
-  name_partial <- str_split(header$text,regex(exp,dotall = TRUE))[[1]][2]
-  name2 <- str_split(name_partial, regex(": ",dotall=TRUE))[[1]][1]
-  name <- str_split(name2, regex("/",dotall=TRUE))[[1]][1]
+  # header file is formatted such that the column names appear in a block of text in this format:
+  # name 3 = specc: Specific Conductance [uS/cm]
+  # the following code uses regular expressions to parse out just the name of the column, e.g. "specc" in the above example
+  search_string <- paste0("name ",colNum,"...") # will be used to search for a string, e.g. 'name 2', followed by 3 chars ( = )
+  name_partial <- str_split(text, regex(search_string, dotall = TRUE))[[1]][2]
+  name2 <- str_split(name_partial, regex(": ", dotall=TRUE))[[1]][1]
+  name <- str_split(name2, regex("/",dotall=TRUE))[[1]][1]  
   name
 }
 
@@ -46,6 +49,19 @@ useSaginawBaySpecifics <- function(lake_name, sitename, site_shortname){
 # remove non-alphanumeric characters from a string
 stripNonAlphanumericChars <- function(str){
   str_replace_all(str,"[^[:alnum:]]", "")
+}
+
+getCastStartTime <- function(headerText){
+  start_time_partial <- str_split(headerText,regex("start_time...",dotall = TRUE))[[1]][2]
+  start_time <- str_split(start_time_partial, regex("..Instrument's time stamp, header.",dotall=TRUE))[[1]][1]
+  start_time
+}
+
+# Determine if a given column name is in the list of column names. 
+# Returns a value > 0 if column exists
+columnExists <- function(columnName, listColumnNames){
+  column_exists <- length(grep(columnName, listColumnNames, value=FALSE))
+  column_exists
 }
 ############################################
 
@@ -117,40 +133,38 @@ for(file in files){
   header <- readtext(paste0(filename,".hdr"))
   
   # get the start time of the cast
-  start_time_partial <- str_split(header$text,regex("start_time...",dotall = TRUE))[[1]][2]
-  start_time <- str_split(start_time_partial, regex("..Instrument's time stamp, header.",dotall=TRUE))[[1]][1]
+  start_time <- getCastStartTime(header$text)
   
   # get the names of the columns from the header file
-  col_names <- c()
-  name_count <- str_split(header$text,regex(" name [0-9]"))
-  for (i in 1:(length(name_count[[1]]) - 1)){
-    col_names <- append(col_names, getColumnNameDataFrame(header$text,i-1))
+  column_names <- c()
+  column_count <- length(str_split(header$text,regex(" name [0-9]"))[[1]]) # number of variables/columns we want, from header file
+  for (i in 1:(column_count - 1)){
+    column_names <- append(column_names, getColumnNameDataFrame(header$text,i-1))
   }
   
   # assign the column names to the data
-  colnames(data) <- col_names
+  colnames(data) <- column_names
   
   # parse the filename to extract the name of the sensor
-  split_filename <- str_split(filename,"_")
-  sensorname <- split_filename[[1]][1]
-  file_sensorname <- sensorname
-  if (sensorname == "SBE19plus") {
-    sensorname = "SBE 19plus"
-    file_sensorname = "CTD"
+  sensor <- str_split(filename,"_")[[1]][1]
+  output_filename_sensor <- sensor
+  if (sensor == "SBE19plus") {
+    sensor = "SBE 19plus"
+    output_filename_sensor = "CTD"
   }
   
   # get components of date from start_time to convert to UTC, and output it
   date_formatted <- as.POSIXct(start_time,format="%b %d %Y %H:%M:%OS")
-  date <- str_remove_all(str_split(date_formatted," ")[[1]][1],"-")
+  output_filename_date <- str_remove_all(str_split(date_formatted," ")[[1]][1],"-")
   
   display_time <- str_split(date_formatted," ")[[1]][2]
   display_date <- str_split(start_time,regex(" "))[[1]]
   
   # site associated with the file (e.g. WE2): or skip to skip and process the next site
-  sitename <- stripNonAlphanumericChars(station_details$station[station_index])
+  sitename <- toupper(stripNonAlphanumericChars(station_details$station[station_index]))
   
   # if the user typed skip, do not process this file
-  if (sitename == "skip") {
+  if (tolower(sitename) == "skip") {
     print(paste0("Skipping file ",file," ..."))
     next
   }
@@ -164,28 +178,28 @@ for(file in files){
   # create first several rows of output csv
   output_indv_csvs <- data.frame(
     variable = c("Date", "Lake", "Site Name", "Program", "Vessel", "Sensor",""),
-    value = c(paste0(display_date[2], "-", display_date[1], "-", display_date[3]), lake_name, station_details$station[station_index], program_name, vessel_name, sensorname, ""),
+    value = c(paste0(display_date[2], "-", display_date[1], "-", display_date[3]), lake_name, station_details$station[station_index], program_name, vessel_name, sensor, ""),
     time = c(display_time, "", "", "", "", "", ""),
     tz = c("UTC", "", "", "", "", "", "")
   )
   
   # write to csv file
   setwd(paste0(out_dir,"/OUTPUT"))
-  output_filename = paste0(date, "_", program_name, "_", file_sensorname, "_", output_sitename, ".csv")
+  output_filename = paste0(output_filename_date, "_", program_name, "_", output_filename_sensor, "_", sitename, ".csv")
   
   # for each column name, bind them together into one data structure
-  output_col_names <- NULL
-  for (i in 1:(length(name_count[[1]]) - 2)){
-    output_col_names <- cbind(output_col_names, getColumnName(header$text,i-1))
+  output_column_names <- NULL
+  for (i in 1:(column_count - 2)){
+    output_column_names <- cbind(output_column_names, getFullColumnName(header$text,i-1))
   }
   
   # actually write the data to the individual output csv files
   write.table(output_indv_csvs, output_filename, col.names=FALSE, sep=",")
-  write.table(output_col_names, output_filename, col.names=FALSE, sep=",", append=TRUE)
-  write.table(data[,1:(length(name_count[[1]]) - 2)], output_filename, col.names=FALSE, sep=",", append=TRUE)
+  write.table(output_column_names, output_filename, col.names=FALSE, sep=",", append=TRUE)
+  write.table(data[,1:(column_count - 2)], output_filename, col.names=FALSE, sep=",", append=TRUE)
   
   # then process the .asc file and add to the summary file as a new sheet
-  setwd(paste0(out_dir))
+  setwd(out_dir)
   
   max_depth <- max(data$depFM)
   sample_depth <- max_depth - 0.5
@@ -225,7 +239,7 @@ for(file in files){
   if(as.numeric(sample_depth_measured) == 2) {
     row3 <- data.frame("0.5-1m")
   
-    for (i in 2:(length(name_count[[1]]) - 2)){
+    for (i in 2:(column_count - 2)){
       mean_value <- mean(subset_data[min(depth_range):max(depth_range),i])
       row3<-cbind(row3, mean_value)
     }
@@ -242,8 +256,8 @@ for(file in files){
       row4 <- data.frame("2.75-3.25m")
     }
   
-    for (i in 2:(length(name_count[[1]]) - 2)){
-      mean_value <- mean(subset_data[min(sample_depth_range):max(sample_depth_range),i])
+    for (i in 2:(column_count - 2)){
+      mean_value <- mean(subset_data[min(sample_depth_range):max(sample_depth_range), i])
       row4<-cbind(row4, mean_value)
     }
     
@@ -257,8 +271,8 @@ for(file in files){
   else {
     row3 <- data.frame("0.5-1m")
     
-    for (i in 2:(length(name_count[[1]]) - 2)){
-      mean_value <- mean(subset_data[min(depth_range):max(depth_range),i])
+    for (i in 2:(column_count - 2)){
+      mean_value <- mean(subset_data[min(depth_range):max(depth_range), i])
       row3<-cbind(row3, mean_value)
     }
     
@@ -266,20 +280,20 @@ for(file in files){
   }
   
   # write the PAR depth column and attach to the subset data
-  par_depth <- ifelse((subset_data$depFM - 0.435) < 0, "",(subset_data$depFM - 0.435))
-  writable_data <- cbind(subset_data[,1:(length(name_count[[1]]) - 2)],par_depth)
+  par_depth <- ifelse((subset_data$depFM - 0.435) < 0, "", (subset_data$depFM - 0.435))
+  writable_data <- cbind(subset_data[,1:(column_count - 2)], par_depth)
   
   row6 <- NULL
   row7 <- NULL
   
-  # check for each variable before writing to sumary sheet. 
-  # Will break if hdr file short names change
-  if(length(grep("depFM",colnames(writable_data),value=FALSE)) > 0){
+  # check for each variable before writing to summary sheet. 
+  # Will break if .hdr file short names change
+  if(columnExists("depFM",colnames(writable_data)) > 0){
     row6 <- cbind(row6, "Depth")
     row7 <- cbind(row7,"(m)")
   }
   
-  if(length(grep("tv290C",colnames(writable_data),value=FALSE)) > 0){
+  if(columnExists("tv290C",colnames(writable_data)) > 0){
     row6 <- cbind(row6, "Temperature")
     row7 <- cbind(row7,"(\u00B0C)")
     
@@ -294,15 +308,18 @@ for(file in files){
     print(temp_plot)
     insertPlot(wb,sitename,startRow = 8, startCol = 13)
   }
-  if(length(grep("c0uS",colnames(writable_data),value=FALSE)) > 0){
+  
+  if(columnExists("c0uS",colnames(writable_data)) > 0){
     row6 <- cbind(row6, "Cond")
     row7 <- cbind(row7,"(\u00B5S/cm)")
   }
-  if(length(grep("specc",colnames(writable_data),value=FALSE)) > 0){
+  
+  if(columnExists("specc",colnames(writable_data)) > 0){
     row6 <- cbind(row6, "SpCond")
     row7 <- cbind(row7,"(\u00B5S/cm)")
   }
-  if(length(grep("par",colnames(writable_data),value=FALSE)) > 0){
+  
+  if(columnExists("par",colnames(writable_data)) > 0){
     row6 <- cbind(row6, "PAR")
     row7 <- cbind(row7,"(\u00B5E/m2/s)")
     
@@ -318,7 +335,8 @@ for(file in files){
     insertPlot(wb,sitename,startRow = 48, startCol = 13)
     
   }
-  if(length(grep("sbeox0Mg",colnames(writable_data),value=FALSE)) > 0){
+  
+  if(columnExists("sbeox0Mg",colnames(writable_data)) > 0){
     row6 <- cbind(row6, "Oxygen")
     row7 <- cbind(row7,"(mg/L)")
     
@@ -334,15 +352,18 @@ for(file in files){
     print(do_plot)
     insertPlot(wb,sitename,startRow = 8, startCol = 20)
   }
-  if(length(grep("sbeox0PS",colnames(writable_data),value=FALSE)) > 0){
+  
+  if(columnExists("sbeox0PS",colnames(writable_data)) > 0){
     row6 <- cbind(row6, "Oxygen")
     row7 <- cbind(row7,"(%)")
   }
-  if(length(grep("CStarAt0",colnames(writable_data),value=FALSE)) > 0){
+  
+  if(columnExists("CStarAt0",colnames(writable_data)) > 0){
     row6 <- cbind(row6, "Atten.")
     row7 <- cbind(row7,"(m-1)")
   }
-  if(length(grep("CStarTr0",colnames(writable_data),value=FALSE)) > 0){
+  
+  if(columnExists("CStarTr0",colnames(writable_data)) > 0){
     row6 <- cbind(row6, "Trans.")
     row7 <- cbind(row7,"(%)")
     
@@ -358,7 +379,8 @@ for(file in files){
     print(trans_plot)
     insertPlot(wb,sitename,startRow = 48, startCol = 20)
   }
-  if(length(grep("chloroflTC0",colnames(writable_data),value=FALSE)) > 0){
+  
+  if(columnExists("chloroflTC0",colnames(writable_data)) > 0){
     row6 <- cbind(row6, "chl a")
     row7 <- cbind(row7,"(\u00B5g/L)")
     
@@ -374,7 +396,8 @@ for(file in files){
     print(chla_plot)
     insertPlot(wb,sitename,startRow = 28, startCol = 13)
   }
-  if(length(grep("phycyflTC0",colnames(writable_data),value=FALSE)) > 0){
+  
+  if(columnExists("phycyflTC0",colnames(writable_data)) > 0){
     row6 <- cbind(row6, "Phycocyanin")
     row7 <- cbind(row7,"(RFU)")
     
@@ -402,6 +425,6 @@ for(file in files){
   writeData(wb, sitename, writable_data, startRow = 8, startCol = 1,colNames = FALSE)
   
   # save the final output to excel summary sheet
-  summary_output_filename = paste0(date,"_",site_shortname,"_",program_name,"_Summary",".xlsx")
+  summary_output_filename = paste0(output_filename_date,"_",site_shortname,"_",program_name,"_Summary",".xlsx")
   saveWorkbook(wb, file = summary_output_filename, overwrite = TRUE)
 }
