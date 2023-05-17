@@ -215,6 +215,10 @@ for(file in files){
   
   # find which rows have depth values less than 0 and begin processing after those rows
   start_index <- max(which(data$depFM < 0)) + 1
+  # there aren't always bad depth values to cut out- in that case, start at the first value
+  if(start_index == -Inf){
+    start_index = 1
+  }
   subset_data <- data[start_index:nrow(data),]
   
   # find 0.5-1m depth range
