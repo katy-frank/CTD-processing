@@ -1,4 +1,4 @@
-station,file_ends_with,surface_depth
+station,cast_number,surface_depth
 we8,1,2
 we4,2,2
 we13,3,2

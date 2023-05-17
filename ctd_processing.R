@@ -94,7 +94,7 @@ site_shortname <- stripNonAlphanumericChars(global_params["shortname"][[1]])
 # initialize the mapping between the station details and the files
 stations <- hashmap()
 for(i in 1:length(station_details[[1]])){
-  stations[[ as.numeric(station_details$file_ends_with[i]) ]] <- i
+  stations[[ as.numeric(station_details$cast_number[i]) ]] <- i
 }
 
 # read in the files in the input directory
