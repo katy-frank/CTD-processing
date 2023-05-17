@@ -19,7 +19,7 @@ Global parameters are parameters that apply to all data from the cruise. These a
 ### Station Details
 On each cruise, multiple stations are typically visited. This results in the creation of multiple raw CTD data files, with names that end in a number e.g. 0001, 0002, etc. However, sometimes a particular data file is corrupt/shouldn't be used. The configuration file *station_details.csv* should be used to list the station names that were visited, the number associated with the raw CTD file for that station (e.g. if WE8 goes with the data file ending in 0001, use 1 for this value), and a value indicating whether surface only or surface and depth samples were taken for this station. List as many stations as were visited in this file.
 - **station**: The name of the station, e.g. WE8
-- **file_ends_with**: The number at the end of the raw data file associated with this station. For example, if the file SBE19plus_01906337_2022_07_25_0001.asc holds data for WE8, then file_ends_with would be 1.
+- **cast_number**: The number at the end of the raw data file associated with this station. For example, if the file SBE19plus_01906337_2022_07_25_0001.asc holds data for WE8, then cast_number would be 1. Another example: SBE19plus_01906337_2022_07_25_0032.asc, cast_number would be 32.
 - **surface_depth**: If only surface samples were taken for this station, enter 1. If surface and depth samples were taken, enter 2.
 
 
